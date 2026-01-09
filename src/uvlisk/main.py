@@ -103,6 +103,32 @@ def ensure_mise():
     os.chmod(mise_path, 0o755)
     return mise_path
 
+def resolve_uv_version(version):
+    """
+    Sanitize and resolve the requested uv version.
+    Handles PEP 440 constraints by defaulting to 'latest' if complex constraints are present.
+    Strips '==' for pinned versions.
+    """
+    if not version:
+        return "latest"
+
+    # If it contains complex constraints/ranges that mise doesn't support directly for installation,
+    # fallback to latest and let uv enforce the constraint.
+    # We check for characters common in ranges/constraints.
+    if any(c in version for c in "><!~*^,"):
+        return "latest"
+
+    # Handle '==' prefix (pinned version)
+    if version.startswith("=="):
+        # Handle '===' which mise likely won't support, treat as complex
+        if version.startswith("==="):
+            return "latest"
+
+        # Strip '==' and whitespace
+        return version[2:].strip()
+
+    return version
+
 def find_uv_version():
     # Start from current directory and walk up
     current_dir = pathlib.Path.cwd()
@@ -112,7 +138,7 @@ def find_uv_version():
         # Check .uv-version
         uv_version_file = current_dir / ".uv-version"
         if uv_version_file.exists():
-            return uv_version_file.read_text().strip()
+            return resolve_uv_version(uv_version_file.read_text().strip())
 
         # Check pyproject.toml
         pyproject_file = current_dir / "pyproject.toml"
@@ -122,7 +148,7 @@ def find_uv_version():
                     data = tomllib.load(f)
                     required_version = data.get("tool", {}).get("uv", {}).get("required-version")
                     if required_version:
-                        return required_version
+                        return resolve_uv_version(required_version)
             except Exception:
                 pass # Ignore parsing errors
 
