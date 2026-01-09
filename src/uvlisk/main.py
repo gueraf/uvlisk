@@ -103,6 +103,50 @@ def ensure_mise():
     os.chmod(mise_path, 0o755)
     return mise_path
 
+def resolve_uv_version(version):
+    """
+    Sanitize and resolve the requested uv version.
+    Handles PEP 440 constraints:
+    - `>=foo` or `<=foo` -> `foo`
+    - `==foo` -> `foo`
+    - `foo` -> `foo`
+    - `latest` or empty -> `latest`
+    - `~=foo`, `^foo`, `<foo`, `>foo`, `!=foo`, `*` -> Raise Error
+    """
+    if not version:
+        return "latest"
+
+    version = version.strip()
+    if version == "latest":
+        return "latest"
+
+    # Check for disallowed characters or constraints
+    # Complex ranges separated by comma
+    if "," in version:
+        raise ValueError(f"Complex version constraints are not supported: {version}")
+
+    # Wildcards
+    if "*" in version:
+        raise ValueError(f"Wildcard versions are not supported: {version}")
+
+    # Exclusive constraints and other complex operators
+    # Check for prefix operators
+    if version.startswith(">=") or version.startswith("<="):
+        return version[2:].strip()
+
+    if version.startswith("=="):
+        if version.startswith("==="):
+             raise ValueError(f"Arbitrary equality '===' is not supported: {version}")
+        return version[2:].strip()
+
+    if version.startswith("<") or version.startswith(">") or \
+       version.startswith("~=") or version.startswith("^") or \
+       version.startswith("!="):
+        raise ValueError(f"Unsupported version constraint: {version}")
+
+    # If no known operator prefix, assume it's a version literal
+    return version
+
 def find_uv_version():
     # Start from current directory and walk up
     current_dir = pathlib.Path.cwd()
@@ -112,7 +156,7 @@ def find_uv_version():
         # Check .uv-version
         uv_version_file = current_dir / ".uv-version"
         if uv_version_file.exists():
-            return uv_version_file.read_text().strip()
+            return resolve_uv_version(uv_version_file.read_text().strip())
 
         # Check pyproject.toml
         pyproject_file = current_dir / "pyproject.toml"
@@ -122,7 +166,7 @@ def find_uv_version():
                     data = tomllib.load(f)
                     required_version = data.get("tool", {}).get("uv", {}).get("required-version")
                     if required_version:
-                        return required_version
+                        return resolve_uv_version(required_version)
             except Exception:
                 pass # Ignore parsing errors
 
