@@ -11,7 +11,7 @@ It is inspired by [bazelisk](https://github.com/bazelbuild/bazelisk).
 You can install `uvlisk` directly from git using `pipx`:
 
 ```bash
-pipx install git+https://github.com/your-username/uvlisk.git
+pipx install git+https://github.com/gueraf/uvlisk.git
 ```
 
 ## Usage
