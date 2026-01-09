@@ -106,27 +106,45 @@ def ensure_mise():
 def resolve_uv_version(version):
     """
     Sanitize and resolve the requested uv version.
-    Handles PEP 440 constraints by defaulting to 'latest' if complex constraints are present.
-    Strips '==' for pinned versions.
+    Handles PEP 440 constraints:
+    - `>=foo` or `<=foo` -> `foo`
+    - `==foo` -> `foo`
+    - `foo` -> `foo`
+    - `latest` or empty -> `latest`
+    - `~=foo`, `^foo`, `<foo`, `>foo`, `!=foo`, `*` -> Raise Error
     """
     if not version:
         return "latest"
 
-    # If it contains complex constraints/ranges that mise doesn't support directly for installation,
-    # fallback to latest and let uv enforce the constraint.
-    # We check for characters common in ranges/constraints.
-    if any(c in version for c in "><!~*^,"):
+    version = version.strip()
+    if version == "latest":
         return "latest"
 
-    # Handle '==' prefix (pinned version)
-    if version.startswith("=="):
-        # Handle '===' which mise likely won't support, treat as complex
-        if version.startswith("==="):
-            return "latest"
+    # Check for disallowed characters or constraints
+    # Complex ranges separated by comma
+    if "," in version:
+        raise ValueError(f"Complex version constraints are not supported: {version}")
 
-        # Strip '==' and whitespace
+    # Wildcards
+    if "*" in version:
+        raise ValueError(f"Wildcard versions are not supported: {version}")
+
+    # Exclusive constraints and other complex operators
+    # Check for prefix operators
+    if version.startswith(">=") or version.startswith("<="):
         return version[2:].strip()
 
+    if version.startswith("=="):
+        if version.startswith("==="):
+             raise ValueError(f"Arbitrary equality '===' is not supported: {version}")
+        return version[2:].strip()
+
+    if version.startswith("<") or version.startswith(">") or \
+       version.startswith("~=") or version.startswith("^") or \
+       version.startswith("!="):
+        raise ValueError(f"Unsupported version constraint: {version}")
+
+    # If no known operator prefix, assume it's a version literal
     return version
 
 def find_uv_version():
